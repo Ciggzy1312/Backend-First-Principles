@@ -4,9 +4,20 @@ import (
 	"net/http"
 
 	"github.com/Ciggzy1312/cdc-uploader/respond"
+	"github.com/Ciggzy1312/cdc-uploader/store"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-func Register(mux *http.ServeMux) {
+type Handler struct {
+	files *mongo.Collection
+	s3    *store.S3
+}
+
+func NewHandler(files *mongo.Collection, s3 *store.S3) *Handler {
+	return &Handler{files: files, s3: s3}
+}
+
+func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mp/files", listFiles)
 	mux.HandleFunc("POST /api/mp/files", createFile)
 	mux.HandleFunc("POST /api/mp/files/{id}/update", updateFile)

@@ -1,22 +1,46 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/Ciggzy1312/cdc-uploader/cdc"
 	"github.com/Ciggzy1312/cdc-uploader/mp"
 	"github.com/Ciggzy1312/cdc-uploader/respond"
+	"github.com/Ciggzy1312/cdc-uploader/store"
 )
 
 func main() {
+	cfg := loadConfig()
+
+	// Connect to both backends up front so a bad setting fails right here.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db, err := store.NewMongo(ctx, cfg.MongoURI, cfg.MongoDB)
+	if err != nil {
+		log.Fatalf("startup: %v", err)
+	}
+	s3c, err := store.NewS3(ctx, store.S3Config{
+		Endpoint:  cfg.S3Endpoint,
+		Region:    cfg.S3Region,
+		Bucket:    cfg.S3Bucket,
+		AccessKey: cfg.S3AccessKey,
+		SecretKey: cfg.S3SecretKey,
+	})
+	if err != nil {
+		log.Fatalf("startup: %v", err)
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		respond.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	mp.Register(mux)
+	mp.NewHandler(db.Collection("mp_files"), s3c).Register(mux)
 	cdc.Register(mux)
 
 	addr := ":8080"
