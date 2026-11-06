@@ -2,7 +2,6 @@ package mp
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/Ciggzy1312/cdc-uploader/respond"
 	"github.com/Ciggzy1312/cdc-uploader/store"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type CompleteRequest struct {
@@ -41,12 +39,6 @@ func toView(f File) fileView {
 }
 
 func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
-	id, err := bson.ObjectIDFromHex(r.PathValue("id"))
-	if err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid file id")
-		return
-	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, REQ_BODY_LIMIT)
 	var req CompleteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -56,17 +48,11 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	var file File
-	err = h.files.FindOne(ctx, bson.M{"_id": id}).Decode(&file)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		respond.Error(w, http.StatusNotFound, "file not found")
+	file, ok := h.findFile(w, r)
+	if !ok {
 		return
 	}
-	if err != nil {
-		log.Printf("complete: mongo find: %v", err)
-		respond.Error(w, http.StatusInternalServerError, "could not load file")
-		return
-	}
+
 	if file.Status != StatusUploading || file.Pending == nil {
 		respond.Error(w, http.StatusConflict, "file has no upload in progress")
 		return
@@ -91,7 +77,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	last := LastUpload{BytesSent: file.Size, DurationMs: req.DurationMs}
 	res, err := h.files.UpdateOne(ctx,
-		bson.M{"_id": id, "status": StatusUploading},
+		bson.M{"_id": file.ID, "status": StatusUploading},
 		bson.M{
 			"$set": bson.M{
 				"status":     StatusReady,

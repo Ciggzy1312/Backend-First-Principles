@@ -9,14 +9,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// list handles GET /api/mp/files.
-//
-// It returns every file, newest first. That includes files still in the
-// "uploading" state (an upload in flight, or one that was abandoned), so the UI
-// can show them as incomplete instead of hiding them.
-//
-// A file's "parts" array can hold up to 10,000 entries (one per 8 MiB part) and
-// the list screen never needs it, so the query projects it away.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

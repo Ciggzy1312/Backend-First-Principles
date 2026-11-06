@@ -118,7 +118,6 @@ func (h *Handler) initiate(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusCreated, initiateResponse{FileID: id.Hex(), Parts: urls})
 }
 
-// abortQuietly cleans up an S3 upload after a failure
 func (h *Handler) abortQuietly(key, uploadID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

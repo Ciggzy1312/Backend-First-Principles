@@ -22,9 +22,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mp/files", h.initiate)
 	mux.HandleFunc("POST /api/mp/files/{id}/update", updateFile)
 	mux.HandleFunc("POST /api/mp/files/{id}/complete", h.complete)
-	mux.HandleFunc("POST /api/mp/files/{id}/abort", abortFile)
+	mux.HandleFunc("POST /api/mp/files/{id}/abort", h.abort)
 	mux.HandleFunc("GET /api/mp/files/{id}/download", h.download)
-	mux.HandleFunc("DELETE /api/mp/files/{id}", deleteFile)
+	mux.HandleFunc("DELETE /api/mp/files/{id}", h.remove)
 }
 
 func dummyFile(id string) map[string]any {
@@ -55,14 +55,4 @@ func updateFile(w http.ResponseWriter, r *http.Request) {
 		"fileId": r.PathValue("id"),
 		"parts":  dummyParts(),
 	})
-}
-
-// POST /api/mp/files/{id}/abort
-func abortFile(w http.ResponseWriter, r *http.Request) {
-	respond.NoContent(w)
-}
-
-// DELETE /api/mp/files/{id}
-func deleteFile(w http.ResponseWriter, r *http.Request) {
-	respond.NoContent(w)
 }

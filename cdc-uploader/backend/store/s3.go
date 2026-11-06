@@ -94,6 +94,17 @@ func (s *S3) PresignGetObject(ctx context.Context, key, contentDisposition strin
 	return req.URL, nil
 }
 
+func (s *S3) DeleteObject(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("delete object: %w", err)
+	}
+	return nil
+}
+
 type CompletedPart struct {
 	N    int
 	ETag string
@@ -128,6 +139,13 @@ func (s *S3) AbortMultipart(ctx context.Context, key, uploadID string) error {
 		Key:      aws.String(key),
 		UploadId: aws.String(uploadID),
 	})
+
+	// checks the error for NoSuchUpload and returns nil
+	var gone *types.NoSuchUpload
+	if errors.As(err, &gone) {
+		return nil
+	}
+
 	if err != nil {
 		return fmt.Errorf("abort multipart upload: %w", err)
 	}
