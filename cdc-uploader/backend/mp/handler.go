@@ -19,7 +19,7 @@ func NewHandler(files *mongo.Collection, s3 *store.S3) *Handler {
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mp/files", listFiles)
-	mux.HandleFunc("POST /api/mp/files", createFile)
+	mux.HandleFunc("POST /api/mp/files", h.initiate)
 	mux.HandleFunc("POST /api/mp/files/{id}/update", updateFile)
 	mux.HandleFunc("POST /api/mp/files/{id}/complete", completeFile)
 	mux.HandleFunc("POST /api/mp/files/{id}/abort", abortFile)

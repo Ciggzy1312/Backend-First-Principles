@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -49,4 +50,43 @@ func NewS3(ctx context.Context, c S3Config) (*S3, error) {
 	}
 
 	return &S3{client: client, presign: s3.NewPresignClient(client), bucket: c.Bucket}, nil
+}
+
+func (s *S3) CreateMultipart(ctx context.Context, key string) (string, error) {
+	out, err := s.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return "", fmt.Errorf("create multipart upload: %w", err)
+	}
+	if out.UploadId == nil {
+		return "", errors.New("create multipart upload: no uploadId returned")
+	}
+	return *out.UploadId, nil
+}
+
+func (s *S3) PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int) (string, error) {
+	req, err := s.presign.PresignUploadPart(ctx, &s3.UploadPartInput{
+		Bucket:     aws.String(s.bucket),
+		Key:        aws.String(key),
+		UploadId:   aws.String(uploadID),
+		PartNumber: aws.Int32(int32(partNumber)),
+	}, s3.WithPresignExpires(PresignTTL))
+	if err != nil {
+		return "", fmt.Errorf("presign part %d: %w", partNumber, err)
+	}
+	return req.URL, nil
+}
+
+func (s *S3) AbortMultipart(ctx context.Context, key, uploadID string) error {
+	_, err := s.client.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
+		Bucket:   aws.String(s.bucket),
+		Key:      aws.String(key),
+		UploadId: aws.String(uploadID),
+	})
+	if err != nil {
+		return fmt.Errorf("abort multipart upload: %w", err)
+	}
+	return nil
 }
