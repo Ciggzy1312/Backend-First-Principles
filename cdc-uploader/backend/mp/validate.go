@@ -64,6 +64,33 @@ func ValidateParts(req InitiateRequest) ([]Part, error) {
 	return parts, nil
 }
 
+type PartETag struct {
+	N    int    `json:"n"`
+	ETag string `json:"etag"`
+}
+
+func OrderParts(expected int, got []PartETag) ([]PartETag, error) {
+	if len(got) != expected {
+		return nil, fmt.Errorf("expected %d parts, got %d", expected, len(got))
+	}
+	ordered := make([]PartETag, expected)
+	seen := make([]bool, expected+1)
+	for _, p := range got {
+		if p.N < 1 || p.N > expected {
+			return nil, fmt.Errorf("part number %d is out of range 1..%d", p.N, expected)
+		}
+		if seen[p.N] {
+			return nil, fmt.Errorf("part %d was sent twice", p.N)
+		}
+		if strings.TrimSpace(p.ETag) == "" {
+			return nil, fmt.Errorf("part %d has an empty etag", p.N)
+		}
+		seen[p.N] = true
+		ordered[p.N-1] = p
+	}
+	return ordered, nil
+}
+
 func isSHA256Hex(s string) bool {
 	if len(s) != 64 {
 		return false

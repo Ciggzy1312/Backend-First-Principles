@@ -21,7 +21,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mp/files", listFiles)
 	mux.HandleFunc("POST /api/mp/files", h.initiate)
 	mux.HandleFunc("POST /api/mp/files/{id}/update", updateFile)
-	mux.HandleFunc("POST /api/mp/files/{id}/complete", completeFile)
+	mux.HandleFunc("POST /api/mp/files/{id}/complete", h.complete)
 	mux.HandleFunc("POST /api/mp/files/{id}/abort", abortFile)
 	mux.HandleFunc("GET /api/mp/files/{id}/download", downloadFile)
 	mux.HandleFunc("DELETE /api/mp/files/{id}", deleteFile)

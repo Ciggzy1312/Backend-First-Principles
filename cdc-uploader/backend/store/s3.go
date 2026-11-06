@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 const PresignTTL = 15 * time.Minute
@@ -77,6 +78,34 @@ func (s *S3) PresignUploadPart(ctx context.Context, key, uploadID string, partNu
 		return "", fmt.Errorf("presign part %d: %w", partNumber, err)
 	}
 	return req.URL, nil
+}
+
+type CompletedPart struct {
+	N    int
+	ETag string
+}
+
+func (s *S3) CompleteMultipart(ctx context.Context, key, uploadID string, parts []CompletedPart) error {
+	done := make([]types.CompletedPart, len(parts))
+	for i, p := range parts {
+		done[i] = types.CompletedPart{
+			PartNumber: aws.Int32(int32(p.N)),
+			ETag:       aws.String(p.ETag),
+		}
+	}
+
+	_, err := s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket:          aws.String(s.bucket),
+		Key:             aws.String(key),
+		UploadId:        aws.String(uploadID),
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: done},
+	})
+
+	if err != nil {
+		return fmt.Errorf("complete multipart upload: %w", err)
+	}
+
+	return nil
 }
 
 func (s *S3) AbortMultipart(ctx context.Context, key, uploadID string) error {

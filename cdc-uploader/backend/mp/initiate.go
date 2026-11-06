@@ -29,8 +29,15 @@ type File struct {
 	PartSize  int64         `bson:"partSize"`
 	Parts     []Part        `bson:"parts"`
 	Pending   *Pending      `bson:"pending,omitempty"`
+	Last      *LastUpload   `bson:"lastUpload,omitempty"`
 	CreatedAt time.Time     `bson:"createdAt"`
 	UpdatedAt time.Time     `bson:"updatedAt"`
+}
+
+// LastUpload records stats about the most recent upload, shown in the UI.
+type LastUpload struct {
+	BytesSent  int64 `bson:"bytesSent" json:"bytesSent"`
+	DurationMs int64 `bson:"durationMs" json:"durationMs"`
 }
 
 // Pending remembers the in-flight multipart upload so we can finish or abort it.
@@ -49,14 +56,6 @@ type initiateResponse struct {
 	Parts  []partURL `json:"parts"`
 }
 
-// Order of work, and why:
-//  1. validate        - cheap, and rejects bad input before touching anything
-//  2. S3 create       - we need S3's uploadId to store in Mongo
-//  3. presign         - local signing, so it cannot leave half-finished state
-//  4. Mongo insert    - the record that ties fileId -> uploadId
-//
-// If step 3 or 4 fails after step 2, we abort the S3 upload so it is not
-// left behind, still holding (and billing for) its parts.
 func (h *Handler) initiate(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, REQ_BODY_LIMIT)
 
