@@ -80,6 +80,20 @@ func (s *S3) PresignUploadPart(ctx context.Context, key, uploadID string, partNu
 	return req.URL, nil
 }
 
+func (s *S3) PresignGetObject(ctx context.Context, key, contentDisposition string) (string, error) {
+	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket:                     aws.String(s.bucket),
+		Key:                        aws.String(key),
+		ResponseContentDisposition: aws.String(contentDisposition),
+	}, s3.WithPresignExpires(PresignTTL))
+
+	if err != nil {
+		return "", fmt.Errorf("presign get: %w", err)
+	}
+
+	return req.URL, nil
+}
+
 type CompletedPart struct {
 	N    int
 	ETag string
