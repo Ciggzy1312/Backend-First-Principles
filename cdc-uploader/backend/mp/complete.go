@@ -25,6 +25,7 @@ type fileView struct {
 	Version    int         `json:"version"`
 	Status     string      `json:"status"`
 	LastUpload *LastUpload `json:"lastUpload,omitempty"`
+	UpdatedAt  time.Time   `json:"updatedAt"`
 }
 
 func toView(f File) fileView {
@@ -35,6 +36,7 @@ func toView(f File) fileView {
 		Version:    f.Version,
 		Status:     f.Status,
 		LastUpload: f.Last,
+		UpdatedAt:  f.UpdatedAt,
 	}
 }
 
