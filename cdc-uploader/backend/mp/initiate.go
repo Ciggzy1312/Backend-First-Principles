@@ -1,7 +1,6 @@
 package mp
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -36,14 +35,30 @@ type File struct {
 
 // LastUpload records stats about the most recent upload, shown in the UI.
 type LastUpload struct {
-	BytesSent  int64 `bson:"bytesSent" json:"bytesSent"`
-	DurationMs int64 `bson:"durationMs" json:"durationMs"`
+	BytesSent  int64        `bson:"bytesSent" json:"bytesSent"`
+	DurationMs int64        `bson:"durationMs" json:"durationMs"`
+	Update     *UpdateStats `bson:"update,omitempty" json:"update,omitempty"` // only after an update
+}
+
+// UpdateStats compares an update with the version it replaced.
+type UpdateStats struct {
+	PartsTotal     int `bson:"partsTotal" json:"partsTotal"`
+	PartsIdentical int `bson:"partsIdentical" json:"partsIdentical"`
 }
 
 // Pending remembers the in-flight multipart upload so we can finish or abort it.
 type Pending struct {
 	S3Key    string `bson:"s3Key"`
 	UploadID string `bson:"uploadId"`
+	// The fields below are set only for an UPDATE. They describe the new
+	// version and replace the file's current details when the update completes;
+	// until then the file keeps serving its old version. For a brand-new file
+	// the details already sit on the file itself, so these stay empty.
+	Version  int    `bson:"version,omitempty"`
+	Name     string `bson:"name,omitempty"`
+	Size     int64  `bson:"size,omitempty"`
+	PartSize int64  `bson:"partSize,omitempty"`
+	Parts    []Part `bson:"parts,omitempty"`
 }
 
 type partURL struct {
@@ -75,26 +90,13 @@ func (h *Handler) initiate(w http.ResponseWriter, r *http.Request) {
 	id := bson.NewObjectID()
 	key := fmt.Sprintf("mp/%s/v1", id.Hex())
 
-	uploadID, err := h.s3.CreateMultipart(ctx, key)
+	uploadID, urls, err := h.startUpload(ctx, key, parts)
 	if err != nil {
-		log.Printf("initiate: %v", err)
+		log.Printf("update: %v", err)
 		respond.Error(w, http.StatusInternalServerError, "could not start upload")
 		return
 	}
 
-	urls := make([]partURL, len(parts))
-	for i, p := range parts {
-		u, err := h.s3.PresignUploadPart(ctx, key, uploadID, p.N)
-		if err != nil {
-			log.Printf("initiate: %v", err)
-			h.abortQuietly(key, uploadID)
-			respond.Error(w, http.StatusInternalServerError, "could not start upload")
-			return
-		}
-		urls[i] = partURL{N: p.N, URL: u}
-	}
-
-	// 4. Mongo insert
 	now := time.Now().UTC()
 	doc := File{
 		ID:        id,
@@ -116,12 +118,4 @@ func (h *Handler) initiate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respond.JSON(w, http.StatusCreated, initiateResponse{FileID: id.Hex(), Parts: urls})
-}
-
-func (h *Handler) abortQuietly(key, uploadID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := h.s3.AbortMultipart(ctx, key, uploadID); err != nil {
-		log.Printf("cleanup: %v (upload %s may need manual abort)", err, uploadID)
-	}
 }

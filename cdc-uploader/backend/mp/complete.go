@@ -38,8 +38,33 @@ func toView(f File) fileView {
 	}
 }
 
+type uploadTarget struct {
+	Version  int
+	Name     string
+	Size     int64
+	PartSize int64
+	Parts    []Part
+}
+
+func targetOf(f File) uploadTarget {
+	if f.S3Key == "" {
+		return uploadTarget{f.Version, f.Name, f.Size, f.PartSize, f.Parts}
+	}
+	p := f.Pending
+	return uploadTarget{p.Version, p.Name, p.Size, p.PartSize, p.Parts}
+}
+
 func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, REQ_BODY_LIMIT)
+	file, ok := h.findFile(w, r)
+	if !ok {
+		return
+	}
+	if file.Pending == nil {
+		respond.Error(w, http.StatusConflict, "file has no upload in progress")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req CompleteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respond.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -47,16 +72,8 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-
-	file, ok := h.findFile(w, r)
-	if !ok {
-		return
-	}
-
-	if file.Status != StatusUploading || file.Pending == nil {
-		respond.Error(w, http.StatusConflict, "file has no upload in progress")
-		return
-	}
+	isUpdate := file.S3Key != ""
+	target := targetOf(file)
 
 	ordered, err := OrderParts(len(file.Parts), req.Parts)
 	if err != nil {
@@ -75,30 +92,50 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	last := LastUpload{BytesSent: file.Size, DurationMs: req.DurationMs}
+	last := LastUpload{BytesSent: target.Size, DurationMs: req.DurationMs}
+	set := bson.M{
+		"status":    StatusReady,
+		"s3Key":     file.Pending.S3Key,
+		"updatedAt": now,
+	}
+
+	if isUpdate {
+		set["version"] = target.Version
+		set["name"] = target.Name
+		set["size"] = target.Size
+		set["partSize"] = target.PartSize
+		set["parts"] = target.Parts
+		last.Update = &UpdateStats{
+			PartsTotal:     len(target.Parts),
+			PartsIdentical: CountIdentical(file.Parts, target.Parts),
+		}
+	}
+	set["lastUpload"] = last
+
 	res, err := h.files.UpdateOne(ctx,
-		bson.M{"_id": file.ID, "status": StatusUploading},
-		bson.M{
-			"$set": bson.M{
-				"status":     StatusReady,
-				"s3Key":      file.Pending.S3Key,
-				"lastUpload": last,
-				"updatedAt":  now,
-			},
-			"$unset": bson.M{"pending": ""},
-		})
+		bson.M{"_id": file.ID, "pending.uploadId": file.Pending.UploadID},
+		bson.M{"$set": set, "$unset": bson.M{"pending": ""}})
 	if err != nil {
 		log.Printf("complete: mongo update: %v", err)
 		respond.Error(w, http.StatusInternalServerError, "upload assembled but record update failed")
 		return
 	}
 	if res.MatchedCount == 0 {
-		respond.Error(w, http.StatusConflict, "file was already completed")
+		respond.Error(w, http.StatusConflict, "upload was already completed")
 		return
+	}
+	if isUpdate {
+		h.deleteQuietly(file.S3Key)
 	}
 
 	file.Status = StatusReady
 	file.S3Key = file.Pending.S3Key
+	file.UpdatedAt = now
+	if isUpdate {
+		file.Version = target.Version
+		file.Name = target.Name
+		file.Size = target.Size
+	}
 	file.Last = &last
 	respond.JSON(w, http.StatusOK, map[string]any{"file": toView(file)})
 }

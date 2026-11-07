@@ -15,7 +15,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	cur, err := h.files.Find(ctx, bson.M{},
 		options.Find().
 			SetSort(bson.D{{Key: "createdAt", Value: -1}}).
-			SetProjection(bson.M{"parts": 0}))
+			SetProjection(bson.M{"parts": 0, "pending.parts": 0}))
 	if err != nil {
 		log.Printf("list: mongo find: %v", err)
 		respond.Error(w, http.StatusInternalServerError, "could not list files")

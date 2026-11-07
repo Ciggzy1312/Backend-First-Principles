@@ -91,6 +91,20 @@ func OrderParts(expected int, got []PartETag) ([]PartETag, error) {
 	return ordered, nil
 }
 
+func CountIdentical(oldParts, newParts []Part) int {
+	have := make(map[string]bool, len(oldParts))
+	for _, p := range oldParts {
+		have[p.SHA256] = true
+	}
+	n := 0
+	for _, p := range newParts {
+		if have[p.SHA256] {
+			n++
+		}
+	}
+	return n
+}
+
 func isSHA256Hex(s string) bool {
 	if len(s) != 64 {
 		return false
