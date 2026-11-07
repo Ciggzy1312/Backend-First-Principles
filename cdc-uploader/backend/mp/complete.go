@@ -24,6 +24,7 @@ type fileView struct {
 	Status     string      `json:"status"`
 	LastUpload *LastUpload `json:"lastUpload,omitempty"`
 	UpdatedAt  time.Time   `json:"updatedAt"`
+	Updating   bool        `json:"updating"` // flag used to check pending stuck updates and show cancel button in UI
 }
 
 func toView(f File) fileView {
@@ -35,6 +36,7 @@ func toView(f File) fileView {
 		Status:     f.Status,
 		LastUpload: f.Last,
 		UpdatedAt:  f.UpdatedAt,
+		Updating:   f.Pending != nil && f.S3Key != "",
 	}
 }
 
@@ -64,7 +66,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	r.Body = http.MaxBytesReader(w, r.Body, REQ_BODY_LIMIT)
 	var req CompleteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respond.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -75,7 +77,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	isUpdate := file.S3Key != ""
 	target := targetOf(file)
 
-	ordered, err := OrderParts(len(file.Parts), req.Parts)
+	ordered, err := OrderParts(len(target.Parts), req.Parts)
 	if err != nil {
 		respond.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -130,6 +132,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 
 	file.Status = StatusReady
 	file.S3Key = file.Pending.S3Key
+	file.Pending = nil
 	file.UpdatedAt = now
 	if isUpdate {
 		file.Version = target.Version

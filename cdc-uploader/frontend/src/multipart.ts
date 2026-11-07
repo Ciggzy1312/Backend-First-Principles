@@ -5,6 +5,7 @@ import {
   abortUpload,
   completeUpload,
   initiateUpload,
+  updateUpload,
   type PartEtag,
 } from "./api";
 import { sha256Hex } from "./lib/sha256";
@@ -20,9 +21,13 @@ export type UploadStatus =
   | { phase: "completing" }
   | { phase: "error"; message: string };
 
+// Uploads a new file, or, when updateFileId is given, replaces the contents of
+// that existing file. Either way the WHOLE file is hashed and sent: Uploader 1
+// has no way to send only what changed.
 export async function uploadFile(
   file: File,
   onStatus: (status: UploadStatus) => void,
+  updateFileId?: string,
 ): Promise<void> {
   if (file.size === 0) throw new Error("Empty files are not supported");
   const started = performance.now();
@@ -39,13 +44,12 @@ export async function uploadFile(
     hashes.push(await sha256Hex(blob));
   }
 
-  // 2. Initiate: the server answers with one presigned S3 URL per part.
-  const { fileId, parts } = await initiateUpload({
-    name: file.name,
-    size: file.size,
-    partSize: PART_SIZE,
-    partHashes: hashes,
-  });
+  // 2. Initiate (new file) or update (existing file): the server answers with
+  //    one presigned S3 URL per part. An update keeps the file's current name.
+  const info = { size: file.size, partSize: PART_SIZE, partHashes: hashes };
+  const { fileId, parts } = updateFileId
+    ? await updateUpload(updateFileId, info)
+    : await initiateUpload({ name: file.name, ...info });
 
   try {
     // 3. PUT each part straight to S3. S3 answers each with an ETag, a receipt
@@ -64,7 +68,8 @@ export async function uploadFile(
     onStatus({ phase: "completing" });
     await completeUpload(fileId, etags, Math.round(performance.now() - started));
   } catch (err) {
-    // Do not leave a half-finished upload (and its stored parts) behind.
+    // Do not leave a half-finished upload (and its stored parts) behind. For
+    // an update this only drops the update; the old version stays intact.
     await abortUpload(fileId).catch(() => {});
     throw err;
   }

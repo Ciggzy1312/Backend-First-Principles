@@ -3,14 +3,21 @@
 export const API_URL: string =
   import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
-export type LastUpload = { bytesSent: number; durationMs: number };
+export type LastUpload = {
+  bytesSent: number;
+  durationMs: number;
+  // Present only after an update: how many parts of the new version had the
+  // same content as the old version, yet were sent again.
+  update?: { partsTotal: number; partsIdentical: number };
+};
 
 export type MpFile = {
   id: string;
   name: string;
   size: number;
   version: number;
-  status: "uploading" | "ready";
+  status: "uploading" | "ready"; // "uploading" = the first upload never finished
+  updating: boolean; // a ready file with an update started but not finished
   lastUpload?: LastUpload;
   updatedAt: string;
 };
@@ -49,14 +56,24 @@ export async function listFiles(): Promise<MpFile[]> {
   return data.files;
 }
 
+export type UploadStart = { fileId: string; parts: PartUrl[] };
+type PartsInfo = { size: number; partSize: number; partHashes: string[] };
+
 // Step 1 of an upload: tell the server about the file, get one upload URL per part.
-export function initiateUpload(req: {
-  name: string;
-  size: number;
-  partSize: number;
-  partHashes: string[];
-}): Promise<{ fileId: string; parts: PartUrl[] }> {
+export function initiateUpload(
+  req: PartsInfo & { name: string },
+): Promise<UploadStart> {
   return call("/api/mp/files", postJson(req));
+}
+
+// Step 1 of an update: same idea for a file that already exists. The server
+// keeps the file's current name, and keeps serving the old version until the
+// update completes.
+export function updateUpload(
+  fileId: string,
+  req: PartsInfo,
+): Promise<UploadStart> {
+  return call(`/api/mp/files/${fileId}/update`, postJson(req));
 }
 
 // Step 3 of an upload: hand the server the ETag receipts so S3 can assemble the file.
@@ -68,9 +85,15 @@ export function completeUpload(
   return call(`/api/mp/files/${fileId}/complete`, postJson({ parts, durationMs }));
 }
 
-// Cancel an upload that failed halfway so S3 does not keep the stored parts.
+// Cancel an upload or update that did not finish, so S3 does not keep the
+// stored parts. For a file that never finished uploading this removes it; for
+// an update it drops the update and the file keeps its current version.
 export function abortUpload(fileId: string): Promise<void> {
   return call(`/api/mp/files/${fileId}/abort`, postJson());
+}
+
+export function deleteFile(fileId: string): Promise<void> {
+  return call(`/api/mp/files/${fileId}`, { method: "DELETE" });
 }
 
 // Download is a plain link, not a fetch(): the server answers with a redirect
