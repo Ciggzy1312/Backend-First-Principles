@@ -46,8 +46,11 @@ func NewS3(ctx context.Context, c S3Config) (*S3, error) {
 		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 	})
 
-	if _, err := client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(c.Bucket)}); err != nil {
-		return nil, fmt.Errorf("s3 bucket %q not reachable (did minio-init run?): %w", c.Bucket, err)
+	_, err = client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(c.Bucket)})
+	var owned *types.BucketAlreadyOwnedByYou
+	var exists *types.BucketAlreadyExists
+	if err != nil && !errors.As(err, &owned) && !errors.As(err, &exists) {
+		return nil, fmt.Errorf("s3 bucket %q: cannot create (is the S3 server running?): %w", c.Bucket, err)
 	}
 
 	return &S3{client: client, presign: s3.NewPresignClient(client), bucket: c.Bucket}, nil
