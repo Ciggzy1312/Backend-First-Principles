@@ -41,7 +41,7 @@ func main() {
 	})
 
 	mp.NewHandler(db.Collection("mp_files"), s3c).Register(mux)
-	cdc.Register(mux)
+	cdc.NewHandler(db.Collection(cdc.ChunksCollection), db.Collection(cdc.FilesCollection), s3c).Register(mux)
 
 	addr := ":8080"
 	log.Printf("listening on %s", addr)
