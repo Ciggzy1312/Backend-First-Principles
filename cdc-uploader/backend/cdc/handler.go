@@ -20,12 +20,12 @@ func NewHandler(chunks, files *mongo.Collection, s3 *store.S3) *Handler {
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/cdc/files", listFiles)
+	mux.HandleFunc("GET /api/cdc/files", h.listFiles)
 	mux.HandleFunc("POST /api/cdc/chunks/missing", h.missingChunks)
 	mux.HandleFunc("PUT /api/cdc/chunks/{hash}", h.putChunk)
 	mux.HandleFunc("POST /api/cdc/files", h.createFile)
 	mux.HandleFunc("PUT /api/cdc/files/{id}", updateFile)
-	mux.HandleFunc("GET /api/cdc/files/{id}/download", downloadFile)
+	mux.HandleFunc("GET /api/cdc/files/{id}/download", h.downloadFile)
 	mux.HandleFunc("DELETE /api/cdc/files/{id}", deleteFile)
 	mux.HandleFunc("POST /api/cdc/gc", runGC)
 }
@@ -45,25 +45,11 @@ func dummyFile(id string) map[string]any {
 	}
 }
 
-// GET /api/cdc/files
-func listFiles(w http.ResponseWriter, r *http.Request) {
-	respond.JSON(w, http.StatusOK, map[string]any{
-		"files": []map[string]any{dummyFile("dummy-1")},
-	})
-}
-
 // PUT /api/cdc/files/{id}   body: {size, fileHash, chunks[], stats}
 func updateFile(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, map[string]any{
 		"file": dummyFile(r.PathValue("id")),
 	})
-}
-
-// GET /api/cdc/files/{id}/download
-func downloadFile(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="dummy.txt"`)
-	_, _ = w.Write([]byte("dummy file contents\n"))
 }
 
 // DELETE /api/cdc/files/{id}
