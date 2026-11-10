@@ -47,3 +47,23 @@ func (h *Handler) release(hashes []string) error {
 		bson.M{"$set": bson.M{"zeroSince": time.Now()}})
 	return err
 }
+
+func diffHashes(oldRefs, newRefs []ChunkRef) (added, removed []string) {
+	oldSet := make(map[string]bool, len(oldRefs))
+	for _, h := range distinctHashes(oldRefs) {
+		oldSet[h] = true
+	}
+	newSet := make(map[string]bool, len(newRefs))
+	for _, h := range distinctHashes(newRefs) {
+		newSet[h] = true
+		if !oldSet[h] {
+			added = append(added, h)
+		}
+	}
+	for _, h := range distinctHashes(oldRefs) {
+		if !newSet[h] {
+			removed = append(removed, h)
+		}
+	}
+	return added, removed
+}

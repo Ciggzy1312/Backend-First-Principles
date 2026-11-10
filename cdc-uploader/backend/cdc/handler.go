@@ -24,7 +24,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/cdc/chunks/missing", h.missingChunks)
 	mux.HandleFunc("PUT /api/cdc/chunks/{hash}", h.putChunk)
 	mux.HandleFunc("POST /api/cdc/files", h.createFile)
-	mux.HandleFunc("PUT /api/cdc/files/{id}", updateFile)
+	mux.HandleFunc("PUT /api/cdc/files/{id}", h.updateFile)
 	mux.HandleFunc("GET /api/cdc/files/{id}/download", h.downloadFile)
 	mux.HandleFunc("DELETE /api/cdc/files/{id}", h.deleteFile)
 	mux.HandleFunc("POST /api/cdc/gc", h.runGC)
