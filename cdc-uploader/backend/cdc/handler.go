@@ -27,7 +27,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/cdc/files/{id}", updateFile)
 	mux.HandleFunc("GET /api/cdc/files/{id}/download", h.downloadFile)
 	mux.HandleFunc("DELETE /api/cdc/files/{id}", h.deleteFile)
-	mux.HandleFunc("POST /api/cdc/gc", runGC)
+	mux.HandleFunc("POST /api/cdc/gc", h.runGC)
 }
 
 func dummyFile(id string) map[string]any {
