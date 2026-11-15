@@ -8,6 +8,7 @@ import {
   updateUpload,
   type PartEtag,
 } from "./api";
+import { runPool } from "./lib/pool";
 import { sha256Hex } from "./lib/sha256";
 
 const PART_SIZE = 8 * 1024 * 1024; // 8 MiB. S3 requires at least 5 MiB per part except the last.
@@ -94,27 +95,4 @@ async function putPart(url: string, blob: Blob): Promise<string> {
     }
   }
   throw lastError;
-}
-
-// Run fn over items with at most `limit` running at the same time. After the
-// first failure no new items are started.
-async function runPool<T>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<void>,
-): Promise<void> {
-  let next = 0;
-  let failed = false;
-  const worker = async () => {
-    while (!failed && next < items.length) {
-      const item = items[next++];
-      try {
-        await fn(item);
-      } catch (err) {
-        failed = true;
-        throw err;
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
